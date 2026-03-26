@@ -25,7 +25,6 @@
         <div class="container nav-content">
             <div class="flex-between w-full">
                 <div class="logo" @click="openPage('home')">LUMINA</div>
-                <button @click="openLogin()" aria-label="الإدارة" class="admin-trigger mobile-only">ADMIN</button>
             </div>
             
             <div class="nav-links hide-scrollbar">
@@ -35,9 +34,9 @@
                 <button @click="openCategory('gaming')" :class="activeCategory === 'gaming' && currentPage === 'category' ? 'nav-link active' : 'nav-link'">Gaming</button>
                 <button @click="openPage('after-sales')" :class="currentPage === 'after-sales' ? 'nav-link active' : 'nav-link'">الصيانة</button>
                 <button @click="openPage('contact')" :class="currentPage === 'contact' ? 'nav-link active' : 'nav-link'">تواصل معنا</button>
+                
+                <button @click="openLogin()" class="nav-link">الإدارة</button>
             </div>
-            
-            <button @click="openLogin()" aria-label="الإدارة" class="admin-trigger desktop-only">ADMIN</button>
         </div>
     </nav>
 
