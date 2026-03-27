@@ -6,17 +6,17 @@
     <title>LUMINA | متجر اللابتوب السريع</title>
     <meta name="description" content="متجر LUMINA - أفضل وأسرع متجر لشراء أجهزة اللابتوب بأرخص الأسعار مع ضمان حقيقي.">
     
-    <link rel="stylesheet" href="style.css">
-    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" media="print" onload="this.media='all'">
-    <noscript>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap">
-    </noscript>
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap"></noscript>
     
-    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 <body x-data="storeData()" x-init="initStore()">
 
@@ -87,7 +87,7 @@
 
     <div class="container flex-col-grow">
         
-        <div x-show="currentPage === 'home'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-cloak>
+        <div x-show="currentPage === 'home'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
             <section class="hero-section flex-center flex-col">
                 <span class="hero-badge">متجر اللابتوب الأول</span>
                 <h1 class="hero-title">قوة الأداء <br><span class="gradient">في متناول يدك.</span></h1>
@@ -108,14 +108,14 @@
                 </div>
             </section>
 
-            <section class="mb-8">
+            <section class="mb-8 content-section">
                 <h2 class="section-title">أرخص الأسعار</h2>
                 <div class="grid-cols grid-3">
                     <template x-for="laptop in products.slice(0, 6)" :key="'sample-'+laptop.id">
                         <div class="glass glass-card product-card" @click="openModal(laptop)">
                             <div x-show="laptop.salePrice" class="sale-badge">🔥 عرض</div>
                             <div class="product-img-box">
-                                <img :src="laptop.img" :alt="laptop.name" loading="lazy" decoding="async">
+                                <img :src="laptop.img" :alt="laptop.name" loading="lazy" decoding="async" width="400" height="250">
                             </div>
                             <span class="product-tag" x-text="getCategoryName(laptop.category)"></span>
                             <h3 class="product-name" x-text="laptop.name"></h3>
@@ -154,12 +154,12 @@
                 <p class="empty-text">لا يوجد أجهزة في هذا القسم حالياً.</p>
             </div>
 
-            <div class="grid-cols grid-3 mb-8">
+            <div class="grid-cols grid-3 mb-8 content-section">
                 <template x-for="(laptop, index) in getFilteredProducts().slice(0, visibleCount)" :key="'cat-'+laptop.id">
                     <div class="glass glass-card product-card" @click="openModal(laptop)">
                         <div x-show="laptop.salePrice" class="sale-badge">🔥 تخفيض</div>
                         <div class="product-img-box h-13rem">
-                            <img :src="laptop.img" :alt="laptop.name" loading="lazy" decoding="async">
+                            <img :src="laptop.img" :alt="laptop.name" loading="lazy" decoding="async" width="400" height="250">
                         </div>
                         <h3 class="product-name text-xl" x-text="laptop.name"></h3>
                         <p class="product-specs" x-text="laptop.specs"></p>
