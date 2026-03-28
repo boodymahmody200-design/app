@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>lab-store | متجر اللابتوب السريع</title>
+    <meta name="description" content="متجر lab-store - أفضل وأسرع متجر لشراء أجهزة اللابتوب بأرخص الأسعار مع ضمان حقيقي.">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap"></noscript>
+    
+    <link rel="stylesheet" href="style.css">
+    
+    <style>
+        /* إضافات الفوتر */
+        .footer { padding: 2rem 0; border-top: 1px solid var(--glass-border); background: rgba(3, 7, 18, 0.9); margin-top: auto; }
+        .footer-flex { display: flex; flex-direction: column; gap: 1.5rem; align-items: center; justify-content: space-between; }
+        @media (min-width: 768px) { .footer-flex { flex-direction: row; } }
+        .footer-right { display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center; }
+        @media (min-width: 768px) { .footer-right { justify-content: flex-start; } }
+        .footer-right a { font-weight: bold; color: #d1d5db; transition: color 0.2s; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; }
+        .footer-right a:hover { color: var(--secondary); }
+        .footer-left p { color: var(--gray-500); font-size: 0.875rem; margin: 0; }
+    </style>
+
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body x-data="storeData()" x-init="initStore()">
+
+    <div x-show="toastMsg" x-transition x-cloak class="toast-msg">
+        <span class="toast-dot" aria-hidden="true"></span>
+        <span x-text="toastMsg"></span>
+    </div>
+
+    <nav class="navbar glass">
+        <div class="container nav-flex">
+            <h1 class="logo" @click="openPage('home')">lab-store</h1>
+            <div class="nav-links">
+                <button @click="openPage('home')" :class="currentPage === 'home' ? 'nav-link active' : 'nav-link'">الرئيسية</button>
+                <button @click="openCategory('workstation')" :class="activeCategory === 'workstation' && currentPage === 'category' ? 'nav-link active' : 'nav-link'">Workstation</button>
+                <button @click="openCategory('business')" :class="activeCategory === 'business' && currentPage === 'category' ? 'nav-link active' : 'nav-link'">Business</button>
+                <button @click="openCategory('gaming')" :class="activeCategory === 'gaming' && currentPage === 'category' ? 'nav-link active' : 'nav-link'">Gaming</button>
+                
+                <button @click="openPage('track')" :class="currentPage === 'track' ? 'nav-link active' : 'nav-link'" style="color: var(--cyan-light);">📍 تتبع الطلب</button>
+
+                <button @click="openPage('cart')" :class="currentPage === 'cart' ? 'nav-link active' : 'nav-link'">
+                    🛒 السلة <span x-show="cart.length > 0" class="nav-cart-badge" x-text="cart.length"></span>
+                </button>
+                
+                <button @click="openLogin()" class="nav-link" x-show="!isAdmin">الإدارة</button>
+                <button @click="openAdminPanel()" class="nav-link active" x-show="isAdmin">لوحة التحكم</button>
+            </div>
+        </div>
+    </nav>
+    <div class="navbar-spacer"></div>
+
+    <div x-show="showLoginModal" x-transition x-cloak class="modal-overlay" @click.self="showLoginModal = false">
+        <div class="glass login-box">
+            <button @click="showLoginModal = false" class="close-btn">✕</button>
+            <div class="modal-icon">🔐</div>
+            <h3 class="modal-heading">تسجيل الدخول</h3>
+            <input type="text" x-model="loginData.username" placeholder="البريد الإلكتروني" class="form-control" dir="ltr">
+            <input type="password" x-model="loginData.password" placeholder="كلمة المرور" @keydown.enter="attemptLogin()" class="form-control" dir="ltr">
+            <button @click="attemptLogin()" :disabled="isLoggingIn" class="btn btn-primary">
+                <span x-text="isLoggingIn ? 'جاري التحقق...' : 'دخول'"></span>
+            </button>
+        </div>
+    </div>
+
+    <section x-show="isAdmin && isAdminPanelOpen" x-transition x-cloak class="admin-panel">
+        <div class="container glass admin-container">
+            <div class="admin-header" style="flex-wrap: wrap; gap: 1rem;">
+                <h2 class="admin-title">⚙️ لوحة التحكم</h2>
+                <div style="display: flex; gap: 1rem; justify-content: center; flex-grow: 1;">
+                    <button @click="adminTab = 'orders'" class="btn-rounded" :style="adminTab === 'orders' ? 'background: var(--primary); color: white;' : 'background: rgba(255,255,255,0.1); color: white; border: 1px solid var(--glass-border);'">📋 إدارة الطلبات</button>
+                    <button @click="adminTab = 'products'" class="btn-rounded" :style="adminTab === 'products' ? 'background: var(--primary); color: white;' : 'background: rgba(255,255,255,0.1); color: white; border: 1px solid var(--glass-border);'">📦 المنتجات والإعدادات</button>
+                </div>
+                <div class="admin-links">
+                    <button @click="logout()" class="link-logout">تسجيل الخروج</button>
+                </div>
+            </div>
+            
+            <div x-show="adminTab === 'orders'" x-transition>
+                <h3 class="mb-4 text-xl">📋 طلبات العملاء المفتوحة</h3>
+                <div class="admin-products-table">
+                    <template x-for="order in orders" :key="'order-'+order.id">
+                        <div class="admin-product-row" style="grid-template-columns: 1fr; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.1); margin-bottom: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.5rem;">
+                                <strong style="color: var(--cyan-light);" x-text="order.orderId"></strong>
+                                <strong style="color: var(--success-hover);" x-text="formatPrice(order.finalTotal)"></strong>
+                            </div>
+                            <div>
+                                <span style="font-weight: bold;" x-text="order.customerName"></span><br>
+                                <span style="font-size: 0.85rem; color: #9ca3af;" x-text="order.customerPhone"></span>
+                            </div>
+                            <div style="font-size: 0.85rem; color: #d1d5db; background: rgba(255,255,255,0.02); padding: 0.5rem; border-radius: 8px;">
+                                <template x-for="item in order.items">
+                                    <div x-text="item.qty + 'x ' + item.name"></div>
+                                </template>
+                            </div>
+                            <div style="color: #9ca3af; font-size: 0.8rem;" x-text="'العنوان: ' + order.customerAddress"></div>
+                            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                <select x-model="order.status" class="form-control" style="margin:0; padding: 0.5rem; flex-grow: 1;" @change="updateOrderStatus(order.id, order.status)">
+                                    <option value="pending">⏳ قيد المراجعة</option>
+                                    <option value="processing">⚙️ جاري التجهيز</option>
+                                    <option value="shipped">🚚 تم الشحن</option>
+                                    <option value="delivered">✅ تم التوصيل</option>
+                                    <option value="cancelled">❌ ملغي</option>
+                                </select>
+                                <button @click="deleteOrder(order.id)" class="btn-danger-sm">حذف</button>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="orders.length === 0" class="text-center" style="color:#aaa; padding: 2rem;">لا توجد طلبات حتى الآن.</div>
+                </div>
+            </div>
+
+            <div x-show="adminTab === 'products'" x-transition>
+                <h3 class="mb-4 text-xl">📦 إضافة جهاز جديد</h3>
+                <div class="grid-cols grid-3 mb-8">
+                    <input type="text" x-model="newItem.name" placeholder="اسم الجهاز" class="form-control">
+                    <select x-model="newItem.category" class="form-control">
+                        <option value="workstation">Workstation</option>
+                        <option value="business">Business</option>
+                        <option value="gaming">Gaming</option>
+                    </select>
+                    <input type="number" x-model="newItem.stock" placeholder="الكمية المتوفرة" class="form-control">
+                    <input type="text" x-model="newItem.price" placeholder="السعر" class="form-control">
+                    <input type="text" x-model="newItem.salePrice" placeholder="سعر التخفيض" class="form-control green-focus">
+                    <input type="text" x-model="newItem.specs" placeholder="المواصفات المختصرة" class="form-control">
+                    <input type="url" x-model="newItem.img" placeholder="رابط الصورة (http)" class="form-control text-left col-span-full" dir="ltr">
+                    <textarea x-model="newItem.desc" placeholder="الوصف الكامل" class="form-control col-span-full no-resize" rows="2"></textarea>
+                    <button @click="addProduct()" class="btn btn-primary col-span-full">نشر الجهاز</button>
+                </div>
+                <hr style="border-color: rgba(255,255,255,0.1); margin: 2rem 0;">
+                <div class="grid-cols grid-3 mb-4">
+                    <h3 class="text-xl col-span-2">🚚 إعدادات الشحن</h3>
+                    <div style="display: flex; gap: 1rem;">
+                        <input type="number" x-model.number="shippingCost" placeholder="قيمة الشحن (مثال: 50)" class="form-control" style="margin:0;">
+                        <button @click="saveShipping()" class="btn btn-success" style="width: auto; white-space: nowrap;">حفظ الشحن</button>
+                    </div>
+                </div>
+                <hr style="border-color: rgba(255,255,255,0.1); margin: 2rem 0;">
+                <h3 class="mb-4 text-xl">📝 تعديل المنتجات الحالية</h3>
+                <div class="admin-products-table">
+                    <template x-for="p in products" :key="'admin-'+p.id">
+                        <div class="admin-product-row" style="background: rgba(0,0,0,0.3);">
+                            <strong x-text="p.name"></strong>
+                            <input type="text" x-model="p.price" placeholder="السعر الأساسي" class="form-control" style="margin:0; padding: 0.5rem;">
+                            <input type="text" x-model="p.salePrice" placeholder="سعر التخفيض" class="form-control green-focus" style="margin:0; padding: 0.5rem;">
+                            <input type="number" x-model.number="p.stock" placeholder="الكمية" class="form-control" style="margin:0; padding: 0.5rem;">
+                            <div style="display:flex; gap: 0.5rem;">
+                                <button @click="updateExistingProduct(p)" class="btn btn-primary" style="padding: 0.5rem;">تحديث</button>
+                                <button @click="deleteProduct(p.id)" class="btn-danger-sm">حذف</button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="container flex-col-grow">
+        
+        <div x-show="currentPage === 'home'" x-transition>
+            <section class="hero-section flex-center flex-col">
+                <h1 class="hero-title">قوة الأداء <br><span class="gradient">في متناول يدك.</span></h1>
+                <div class="grid-cols grid-3 w-full mt-8">
+                    <button @click="openCategory('workstation')" class="glass glass-card category-card text-center"><h3 class="category-title">Workstation</h3></button>
+                    <button @click="openCategory('business')" class="glass glass-card category-card text-center"><h3 class="category-title">Business</h3></button>
+                    <button @click="openCategory('gaming')" class="glass glass-card category-card text-center"><h3 class="category-title">Gaming</h3></button>
+                </div>
+            </section>
+
+            <section class="mb-8">
+                <h2 class="section-title">أحدث الأجهزة</h2>
+                <div class="grid-cols grid-3">
+                    <template x-for="laptop in getSortedProducts().slice(0, 6)" :key="'home-'+laptop.id">
+                        <div class="glass glass-card product-card" @click="viewProductDetails(laptop)">
+                            <div x-show="laptop.salePrice" class="sale-badge">🔥 عرض</div>
+                            <div class="product-img-box"><img :src="laptop.img" :alt="laptop.name"></div>
+                            <span class="product-tag" x-text="getCategoryName(laptop.category)"></span>
+                            <h3 class="product-name" x-text="laptop.name"></h3>
+                            <div class="product-footer">
+                                <template x-if="laptop.salePrice">
+                                    <div class="price-box price-box-row" style="align-items: center;">
+                                        <span class="price-new text-xl" x-text="formatPrice(laptop.salePrice)"></span>
+                                        <span class="price-old" style="font-size: 1rem; color: #f87171; text-decoration: line-through; margin-right: 8px;" x-text="formatPrice(laptop.price)"></span>
+                                    </div>
+                                </template>
+                                <template x-if="!laptop.salePrice">
+                                    <span class="price-regular text-xl" x-text="formatPrice(laptop.price)"></span>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </section>
+        </div>
+
+        <div x-show="currentPage === 'category'" x-transition x-cloak>
+            <div class="page-header mt-8" style="flex-wrap: wrap; gap: 1.5rem;">
+                <h2 class="category-page-title" x-text="getCategoryName(activeCategory)"></h2>
+                <div style="flex-grow: 1; max-width: 400px; width: 100%;">
+                    <input type="text" x-model="categorySearch" placeholder="🔍 بحث في هذا القسم..." class="form-control" style="margin: 0; border-radius: 99px; background: rgba(255,255,255,0.1);">
+                </div>
+                <button @click="openPage('home')" class="btn-white btn-rounded">العودة ➔</button>
+            </div>
+            <div x-show="getFilteredProducts().length === 0" class="glass text-center empty-state"><div class="empty-icon">📭</div><p class="empty-text">لا توجد أجهزة مطابقة لبحثك.</p></div>
+            <div class="grid-cols grid-3 mb-8">
+                <template x-for="laptop in getFilteredProducts()" :key="'cat-'+laptop.id">
+                    <div class="glass glass-card product-card" @click="viewProductDetails(laptop)">
+                        <div x-show="laptop.salePrice" class="sale-badge">🔥 عرض</div>
+                        <div class="product-img-box"><img :src="laptop.img" :alt="laptop.name"></div>
+                        <h3 class="product-name text-xl" x-text="laptop.name"></h3>
+                        <p class="product-specs" x-text="laptop.specs"></p>
+                        <div class="product-footer mb-4">
+                            <template x-if="laptop.salePrice">
+                                <div class="price-box price-box-row" style="align-items: center;">
+                                    <span class="price-new text-2xl" x-text="formatPrice(laptop.salePrice)"></span>
+                                    <span class="price-old" style="font-size: 1.1rem; color: #f87171; text-decoration: line-through; margin-right: 8px;" x-text="formatPrice(laptop.price)"></span>
+                                </div>
+                            </template>
+                            <template x-if="!laptop.salePrice">
+                                <span class="price-regular text-2xl" x-text="formatPrice(laptop.price)"></span>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <div x-show="currentPage === 'product'" x-transition x-cloak class="mt-8 mb-8">
+            <button @click="openPage('home')" class="btn-white btn-rounded mb-4">العودة ➔</button>
+            <div class="glass box-p-2rem single-product-grid" x-show="selectedProduct">
+                <div class="single-img-wrapper"><img :src="selectedProduct?.img" :alt="selectedProduct?.name"></div>
+                <div class="single-product-info">
+                    <h2 class="hero-title" style="font-size: 2.5rem; margin:0;" x-text="selectedProduct?.name"></h2>
+                    <div class="price-box price-box-row" style="justify-content: flex-start;">
+                        <span class="price-new" style="font-size: 2.5rem;" x-text="formatPrice(selectedProduct?.salePrice || selectedProduct?.price)"></span>
+                        <span x-show="selectedProduct?.salePrice" class="price-old" style="font-size: 1.3rem; color: #f87171; text-decoration: line-through; margin-right: 12px;" x-text="formatPrice(selectedProduct?.price)"></span>
+                    </div>
+                    <div x-show="selectedProduct?.stock > 0" class="product-tag" style="background: rgba(34,197,94,0.1); color: var(--success-hover);">متوفر: <span x-text="selectedProduct?.stock"></span> جهاز</div>
+                    <div x-show="!selectedProduct?.stock || selectedProduct?.stock <= 0" class="product-tag" style="background: rgba(239,68,68,0.1); color: var(--danger-hover);">نفذت الكمية</div>
+                    <div><h4 class="modal-subtitle">المواصفات</h4><p class="specs-box" x-text="selectedProduct?.specs"></p></div>
+                    <div><h4 class="modal-subtitle">الوصف</h4><p x-text="selectedProduct?.desc" style="color: #d1d5db; line-height: 1.8;"></p></div>
+                    <div style="margin-top: auto;">
+                        <button @click="addToCart(selectedProduct)" class="btn btn-primary" :disabled="!selectedProduct?.stock || selectedProduct?.stock <= 0">🛒 أضف إلى السلة</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="currentPage === 'track'" x-transition x-cloak class="mt-8 mb-8 page-container">
+            <h2 class="section-title text-center" style="border:none;">📍 تتبع حالة طلبك</h2>
+            <div class="glass box-p-2rem text-center" style="max-width: 500px; margin: 0 auto;">
+                <p style="color: #9ca3af; margin-bottom: 1.5rem;">أدخل رقم الطلب الذي استلمته في رسالة الواتساب.</p>
+                <input type="text" x-model="trackOrderId" placeholder="رقم الطلب (مثال: LAB-12345)" class="form-control" style="text-align: center; font-size: 1.2rem;" dir="ltr">
+                <button @click="trackOrder()" class="btn btn-primary mt-4">بحث عن الطلب 🔍</button>
+                <div x-show="trackError" class="mt-4" style="color: var(--danger-hover); font-weight: bold;" x-text="trackError"></div>
+                <div x-show="trackedOrder" class="mt-8 text-right" style="background: rgba(0,0,0,0.4); padding: 1.5rem; border-radius: 16px; border: 1px solid var(--glass-border);">
+                    <h3 class="text-xl mb-4" style="color: var(--cyan-light);">تفاصيل الطلب: <span x-text="trackedOrder?.orderId" dir="ltr"></span></h3>
+                    <div style="margin-bottom: 1rem;">
+                        <strong>حالة الطلب الآن: </strong>
+                        <span class="product-tag" style="font-size: 1rem; padding: 0.5rem 1rem; display: inline-block; margin-top: 0.5rem;" :style="getStatusStyle(trackedOrder?.status)" x-text="getOrderStatusName(trackedOrder?.status)"></span>
+                    </div>
+                    <p style="margin-bottom: 0.5rem; color: #d1d5db;"><strong>الاسم:</strong> <span x-text="trackedOrder?.customerName"></span></p>
+                    <p style="margin-bottom: 0.5rem; color: #d1d5db;"><strong>العنوان:</strong> <span x-text="trackedOrder?.customerAddress"></span></p>
+                    <p style="margin-bottom: 0.5rem; color: #d1d5db;"><strong>الإجمالي:</strong> <span style="color: var(--success-hover); font-weight: bold;" x-text="formatPrice(trackedOrder?.finalTotal)"></span></p>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="currentPage === 'cart'" x-transition x-cloak class="mt-8 mb-8 page-container">
+            <h2 class="section-title">🛒 سلة المشتريات</h2>
+            <div x-show="cart.length === 0" class="glass text-center empty-state"><div class="empty-icon">📭</div><p class="empty-text">سلتك فارغة حالياً.</p><button @click="openPage('home')" class="btn btn-primary mt-8" style="width: auto; margin: 1rem auto;">تصفح الأجهزة</button></div>
+            <div x-show="cart.length > 0">
+                <div class="cart-list">
+                    <template x-for="item in cart" :key="'cart-'+item.id">
+                        <div class="cart-item">
+                            <div class="cart-item-info"><img :src="item.img" class="cart-item-img"><div><h4 style="font-size: 1.1rem;" x-text="item.name"></h4><span style="color: var(--success-hover); font-weight: bold;" x-text="formatPrice(item.salePrice || item.price)"></span></div></div>
+                            <div style="display: flex; gap: 1rem; align-items: center;"><div class="qty-controls"><button @click="updateCartQty(item, 1)" class="qty-btn">+</button><span style="width: 20px; text-align: center;" x-text="item.qty"></span><button @click="updateCartQty(item, -1)" class="qty-btn">-</button></div><button @click="removeFromCart(item.id)" class="btn-danger-sm">حذف</button></div>
+                        </div>
+                    </template>
+                </div>
+                <div class="cart-summary mb-8">
+                    <div class="summary-row"><span>إجمالي الأجهزة:</span><span x-text="formatPrice(getSubTotal())"></span></div>
+                    <div class="summary-row"><span>مصاريف الشحن:</span><span x-text="shippingCost > 0 ? formatPrice(shippingCost) : 'مجاني'"></span></div>
+                    <div class="summary-total"><span>الإجمالي الكلي:</span><span x-text="formatPrice(getSubTotal() + Number(shippingCost))"></span></div>
+                </div>
+                <div class="glass box-p-2rem">
+                    <h3 class="mb-4 text-xl">📝 تفاصيل الشحن والتواصل</h3>
+                    <input type="text" x-model="orderData.name" placeholder="الاسم ثلاثي" class="form-control">
+                    <input type="tel" x-model="orderData.phone" placeholder="رقم الهاتف" class="form-control" dir="ltr">
+                    <textarea x-model="orderData.address" placeholder="العنوان بالتفصيل (المحافظة، المركز، الشارع)" rows="2" class="form-control no-resize"></textarea>
+                    <button @click="checkout()" class="btn btn-success mt-4">تأكيد الطلب وإرسال واتساب 💬</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <footer class="footer">
+        <div class="container footer-flex">
+            <div class="footer-right">
+                <a href="#" target="_blank">📍 موقعنا: القاهرة، مصر</a>
+                <a href="tel:+201000000000">📞 01000000000</a>
+                <a href="https://facebook.com" target="_blank">📘 صفحة الفيسبوك</a>
+            </div>
+            <div class="footer-left">
+                <p>© 2026 lab-store Laptop</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAZEXiU7chMLIUVeiot0gb-OXoejNW5N2g",
+            authDomain: "store-6323a.firebaseapp.com",
+            projectId: "store-6323a",
+            storageBucket: "store-6323a.firebasestorage.app",
+            messagingSenderId: "643869595006",
+            appId: "1:643869595006:web:778fd4cd758a14d2e38f2f",
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        function storeData() {
+            return {
+                isAdmin: false, isAdminPanelOpen: false, adminTab: 'orders', showLoginModal: false, isLoggingIn: false, 
+                loginData: { username: '', password: '' }, 
+                currentPage: 'home', activeCategory: 'business', selectedProduct: null,
+                products: [], toastMsg: '', whatsappNumber: "201000000000", 
+                cart: [], shippingCost: 0, categorySearch: '',
+                orderData: { name: '', phone: '', address: '' },
+                newItem: { name: '', price: '', salePrice: '', stock: 1, specs: '', img: '', desc: '', category: 'workstation' },
+                orders: [], trackOrderId: '', trackedOrder: null, trackError: '',
+
+                initStore() {
+                    auth.onAuthStateChanged((user) => { 
+                        this.isAdmin = !!user; 
+                        if(this.isAdmin) {
+                            db.collection("orders").orderBy("timestamp", "desc").onSnapshot(snapshot => {
+                                let fetchedOrders = [];
+                                snapshot.forEach(doc => fetchedOrders.push({ id: doc.id, ...doc.data() }));
+                                this.orders = fetchedOrders;
+                            });
+                        }
+                    });
+
+                    db.collection("products").get().then((querySnapshot) => {
+                        let fetched = [];
+                        querySnapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() }));
+                        this.products = fetched;
+                    });
+
+                    db.collection("settings").doc("general").get().then((doc) => {
+                        if (doc.exists && doc.data().shipping !== undefined) {
+                            this.shippingCost = Number(doc.data().shipping) || 0;
+                        }
+                    });
+                },
+
+                openAdminPanel() {
+                    this.isAdminPanelOpen = !this.isAdminPanelOpen;
+                },
+
+                openPage(page) { 
+                    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                    this.currentPage = page; 
+                    if(page !== 'track') { this.trackOrderId = ''; this.trackedOrder = null; this.trackError = ''; }
+                },
+                openCategory(cat) { this.activeCategory = cat; this.categorySearch = ''; this.openPage('category'); },
+
+                getSortedProducts() { return this.products.sort((a, b) => { return this.parsePrice(a.salePrice || a.price) - this.parsePrice(b.salePrice || b.price); }); },
+                getFilteredProducts() { 
+                    let filtered = this.getSortedProducts().filter(p => p.category === this.activeCategory);
+                    if (this.categorySearch.trim() !== '') {
+                        let q = this.categorySearch.toLowerCase();
+                        filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || (p.specs && p.specs.toLowerCase().includes(q)));
+                    }
+                    return filtered;
+                },
+
+                getCategoryName(cat) { const names = { 'workstation': 'Workstation', 'business': 'Business', 'gaming': 'Gaming' }; return names[cat] || 'عام'; },
+                viewProductDetails(product) { this.selectedProduct = product; this.openPage('product'); },
+
+                addToCart(product) {
+                    let existing = this.cart.find(item => item.id === product.id);
+                    let maxStock = parseInt(product.stock) || 0;
+                    if(existing) {
+                        if(existing.qty < maxStock) existing.qty++;
+                        else { this.showToast('عفواً، لا توجد كمية إضافية'); return; }
+                    } else {
+                        if(maxStock > 0) this.cart.push({...product, qty: 1});
+                    }
+                    this.showToast('تمت الإضافة للسلة بنجاح');
+                },
+                updateCartQty(item, change) {
+                    let maxStock = parseInt(item.stock) || 0;
+                    if(change > 0 && item.qty >= maxStock) { this.showToast('أقصى كمية متوفرة'); return; }
+                    item.qty += change;
+                    if(item.qty <= 0) this.removeFromCart(item.id);
+                },
+                removeFromCart(id) { this.cart = this.cart.filter(item => item.id !== id); },
+                
+                parsePrice(priceStr) { return parseInt(String(priceStr).replace(/\D/g, '')) || 0; },
+                getSubTotal() { return this.cart.reduce((total, item) => { return total + (this.parsePrice(item.salePrice || item.price) * item.qty); }, 0); },
+
+                checkout() {
+                    if(!this.orderData.name || !this.orderData.phone || !this.orderData.address) {
+                        this.showToast('يرجى إكمال بيانات الشحن كاملة'); return;
+                    }
+                    
+                    let generatedOrderId = 'LAB-' + Math.floor(10000 + Math.random() * 90000);
+                    let finalTotal = this.getSubTotal() + Number(this.shippingCost);
+                    
+                    let orderDoc = {
+                        orderId: generatedOrderId, customerName: this.orderData.name, customerPhone: this.orderData.phone, customerAddress: this.orderData.address,
+                        items: this.cart, shippingCost: Number(this.shippingCost), finalTotal: finalTotal, status: 'pending', timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+
+                    db.collection("orders").add(orderDoc).then(() => {
+                        let itemsText = this.cart.map(i => `- ${i.name} (الكمية: ${i.qty})`).join('\n');
+                        let msg = `🛒 *طلب جديد من الموقع*\n\n*رقم الطلب:* ${generatedOrderId}\n\n*المنتجات:*\n${itemsText}\n\n*الشحن:* ${this.shippingCost} ج.م\n*الإجمالي الكلي:* ${this.formatPrice(finalTotal)}\n\n*بيانات العميل:*\nالاسم: ${this.orderData.name}\nالهاتف: ${this.orderData.phone}\nالعنوان: ${this.orderData.address}\n\n📍 *تتبع طلبك عبر الموقع باستخدام رقم الطلب.*`;
+                        window.open(`https://wa.me/${this.whatsappNumber}?text=${encodeURIComponent(msg)}`, '_blank');
+                        
+                        this.cart = []; this.orderData = { name: '', phone: '', address: '' };
+                        this.showToast(`تم تسجيل طلبك! رقم الطلب: ${generatedOrderId}`);
+                        
+                        this.trackOrderId = generatedOrderId;
+                        this.openPage('track');
+                        this.trackOrder();
+                        
+                    }).catch(err => alert("حدث خطأ أثناء إرسال الطلب، يرجى المحاولة مرة أخرى."));
+                },
+
+                trackOrder() {
+                    if(!this.trackOrderId) { this.trackError = 'الرجاء إدخال رقم الطلب'; return; }
+                    this.trackError = ''; this.trackedOrder = null;
+
+                    db.collection("orders").where("orderId", "==", this.trackOrderId.trim().toUpperCase()).get()
+                    .then(snapshot => {
+                        if(snapshot.empty) { this.trackError = 'رقم الطلب غير صحيح أو غير مسجل لدينا.'; } 
+                        else { this.trackedOrder = snapshot.docs[0].data(); }
+                    }).catch(err => this.trackError = 'حدث خطأ أثناء البحث عن الطلب.');
+                },
+
+                updateOrderStatus(docId, newStatus) { db.collection("orders").doc(docId).update({ status: newStatus }).then(() => this.showToast('تم تحديث حالة الطلب بنجاح')); },
+                deleteOrder(docId) { if(confirm('هل أنت متأكد من حذف هذا الطلب نهائياً؟')) { db.collection("orders").doc(docId).delete().then(() => this.showToast('تم حذف الطلب')); } },
+
+                getOrderStatusName(status) {
+                    const statuses = { 'pending': '⏳ قيد المراجعة', 'processing': '⚙️ جاري التجهيز', 'shipped': '🚚 تم الشحن', 'delivered': '✅ تم التوصيل', 'cancelled': '❌ ملغي' };
+                    return statuses[status] || 'غير معروف';
+                },
+                
+                getStatusStyle(status) {
+                    if(status === 'pending') return 'background: rgba(234,179,8,0.2); color: #facc15;';
+                    if(status === 'processing') return 'background: rgba(59,130,246,0.2); color: #60a5fa;';
+                    if(status === 'shipped') return 'background: rgba(168,85,247,0.2); color: #c084fc;';
+                    if(status === 'delivered') return 'background: rgba(34,197,94,0.2); color: #4ade80;';
+                    if(status === 'cancelled') return 'background: rgba(239,68,68,0.2); color: #f87171;';
+                    return '';
+                },
+
+                saveShipping() {
+                    let costToSave = Number(this.shippingCost) || 0;
+                    db.collection("settings").doc("general").set({ shipping: costToSave }, {merge: true})
+                      .then(() => { this.shippingCost = costToSave; this.showToast('تم حفظ قيمة الشحن'); })
+                      .catch(err => alert("تعذر الحفظ! يرجى مراجعة Firebase Rules."));
+                },
+                addProduct() {
+                    if(!this.newItem.name || !this.newItem.price) { this.showToast("أكمل البيانات الأساسية"); return; }
+                    db.collection("products").add(this.newItem).then((docRef) => {
+                        this.products.unshift({...this.newItem, id: docRef.id});
+                        this.showToast('تم إضافة الجهاز');
+                        this.newItem = { name: '', price: '', salePrice: '', stock: 1, specs: '', img: '', desc: '', category: 'workstation' };
+                    });
+                },
+                updateExistingProduct(product) { db.collection("products").doc(product.id).update({ price: String(product.price), salePrice: String(product.salePrice || ""), stock: Number(product.stock) }).then(() => this.showToast('تم تحديث بيانات المنتج')); },
+                deleteProduct(id) { if(confirm('متأكد من الحذف؟')) { db.collection("products").doc(id).delete().then(() => { this.products = this.products.filter(p => p.id !== id); this.showToast('تم الحذف'); }); } },
+
+                formatPrice(p) { return p ? this.parsePrice(p).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + ' ج.م' : '0 ج.م'; },
+                showToast(msg) { this.toastMsg = msg; setTimeout(() => { this.toastMsg = ''; }, 2500); },
+                
+                openLogin() { this.showLoginModal = true; },
+                attemptLogin() {
+                    this.isLoggingIn = true;
+                    auth.signInWithEmailAndPassword(this.loginData.username, this.loginData.password)
+                        .then(() => { this.showLoginModal = false; this.showToast("تم الدخول"); this.isAdminPanelOpen = true; })
+                        .catch(() => alert('خطأ في البيانات'))
+                        .finally(() => this.isLoggingIn = false);
+                },
+                logout() { auth.signOut().then(() => { this.isAdminPanelOpen = false; this.showToast("تم الخروج"); }); }
+            }
+        }
+    </script>
+</body>
+</html>
